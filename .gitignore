@@ -1,0 +1,23 @@
+# .NET Core
+bin/
+obj/
+*.user
+*.userosscache
+*.sln.docstates
+appsettings.Development.json
+
+# Node/Angular
+node_modules/
+dist/
+.angular/
+npm-debug.log
+yarn-error.log
+
+# SQLite Database
+*.db
+*.db-shm
+*.db-wal
+
+# OS generated files
+.DS_Store
+Thumbs.db
