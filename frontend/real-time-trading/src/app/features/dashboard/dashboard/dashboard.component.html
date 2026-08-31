@@ -1,0 +1,49 @@
+<main class="dashboard-shell">
+  <header class="dashboard-header">
+    <div>
+      <p class="eyebrow">LIVE MARKET TERMINAL</p>
+      <h1>Trading dashboard</h1>
+      <p class="header-copy">Real-time prices, simulated market orders, and current exposure.</p>
+    </div>
+    <div class="connection-status" [class]="'status-' + health.status.toLowerCase()">
+      <span class="status-dot"></span><span>{{ health.status }}</span>
+      <small *ngIf="health.status === 'Connected'">{{ health.subscribedSymbols }} instruments</small>
+      <small *ngIf="health.status === 'Error'">{{ health.error || 'Feed unavailable' }}</small>
+    </div>
+  </header>
+
+  <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">{{ errorMessage }}<button type="button" class="btn-close" (click)="errorMessage = ''" aria-label="Close"></button></div>
+  <div *ngIf="successMessage" class="alert alert-success alert-dismissible fade show" role="alert">{{ successMessage }}<button type="button" class="btn-close" (click)="successMessage = ''" aria-label="Close"></button></div>
+
+  <section class="summary-grid" aria-label="Account summary">
+    <article class="summary-card"><span>Live instruments</span><strong>{{ marketPrices.length }}</strong><small>Latest provider prices</small></article>
+    <article class="summary-card"><span>Open positions</span><strong>{{ positions.length }}</strong><small>Net exposure by symbol</small></article>
+    <article class="summary-card" [class.positive]="totalUnrealizedProfitLoss >= 0" [class.negative]="totalUnrealizedProfitLoss < 0"><span>Unrealized P/L</span><strong>{{ totalUnrealizedProfitLoss | number:'1.2-2' }}</strong><small>Based on latest market price</small></article>
+    <article class="summary-card"><span>Trades today</span><strong>{{ trades.length }}</strong><small>Stored in SQL Server</small></article>
+  </section>
+
+  <section class="main-grid">
+    <article class="panel prices-panel">
+      <div class="panel-heading"><div><h2>Live prices</h2><p>Updates are pushed through SignalR.</p></div><button class="btn btn-sm btn-outline-light" (click)="loadDashboard()">Refresh</button></div>
+      <div *ngIf="loadingMarketData" class="empty-state"><div class="spinner-border spinner-border-sm"></div> Connecting to price feed...</div>
+      <div *ngIf="!loadingMarketData && marketPrices.length === 0" class="empty-state">Waiting for the provider to publish prices.</div>
+      <div *ngIf="marketPrices.length > 0" class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0"><thead><tr><th>Symbol</th><th>Last price</th><th>Provider time</th></tr></thead><tbody><tr *ngFor="let price of marketPrices; trackBy: trackBySymbol"><td class="symbol-cell">{{ price.symbol }}</td><td class="price-cell">{{ price.price | number:'1.2-8' }}</td><td>{{ price.timestamp | date:'HH:mm:ss' }}</td></tr></tbody></table>
+      </div>
+    </article>
+
+    <aside class="panel order-panel">
+      <div class="panel-heading"><div><h2>Quick trade</h2><p>Executed at the latest cached price.</p></div></div>
+      <label for="symbol">Instrument</label><select id="symbol" class="form-select" [(ngModel)]="selectedSymbol"><option value="">Select instrument</option><option *ngFor="let price of marketPrices" [value]="price.symbol">{{ price.symbol }}</option></select>
+      <div class="side-toggle" aria-label="Order side"><button [class.active-buy]="selectedSide === 'BUY'" (click)="selectedSide = 'BUY'">Buy</button><button [class.active-sell]="selectedSide === 'SELL'" (click)="selectedSide = 'SELL'">Sell</button></div>
+      <label for="quantity">Quantity</label><input id="quantity" class="form-control" type="number" min="0.000001" step="0.000001" [(ngModel)]="quantity" placeholder="0.00">
+      <div class="order-preview"><div><span>Live price</span><strong>{{ getSelectedPrice() | number:'1.2-8' }}</strong></div><div><span>Estimated value</span><strong>{{ estimatedOrderValue | number:'1.2-2' }}</strong></div></div>
+      <button class="btn place-order-button" [class.buy-button]="selectedSide === 'BUY'" [class.sell-button]="selectedSide === 'SELL'" [disabled]="placingOrder || !selectedSymbol" (click)="placeOrder()"><span *ngIf="placingOrder" class="spinner-border spinner-border-sm me-2"></span>{{ placingOrder ? 'Submitting...' : selectedSide + ' market order' }}</button>
+    </aside>
+  </section>
+
+  <section class="secondary-grid">
+    <article class="panel"><div class="panel-heading"><div><h2>Positions</h2><p>Net position and mark-to-market P/L.</p></div></div><div *ngIf="loadingPositions" class="empty-state">Loading positions...</div><div *ngIf="!loadingPositions && positions.length === 0" class="empty-state">No open positions yet.</div><div *ngIf="positions.length > 0" class="table-responsive"><table class="table table-dark table-hover align-middle mb-0"><thead><tr><th>Symbol</th><th>Net qty</th><th>Avg price</th><th>Current</th><th>P/L</th></tr></thead><tbody><tr *ngFor="let position of positions"><td class="symbol-cell">{{ position.symbol }}</td><td>{{ position.quantity | number:'1.2-4' }}</td><td>{{ position.averagePrice | number:'1.2-8' }}</td><td>{{ position.currentPrice | number:'1.2-8' }}</td><td [class.text-success]="position.unrealizedProfitLoss >= 0" [class.text-danger]="position.unrealizedProfitLoss < 0">{{ position.unrealizedProfitLoss | number:'1.2-2' }}</td></tr></tbody></table></div></article>
+    <article class="panel"><div class="panel-heading"><div><h2>Trade history</h2><p>Most recent simulated executions.</p></div></div><div *ngIf="loadingTrades" class="empty-state">Loading trade history...</div><div *ngIf="!loadingTrades && trades.length === 0" class="empty-state">Your executed orders will appear here.</div><div *ngIf="trades.length > 0" class="table-responsive"><table class="table table-dark table-hover align-middle mb-0"><thead><tr><th>Trade</th><th>Symbol</th><th>Side</th><th>Quantity</th><th>Price</th><th>Time</th></tr></thead><tbody><tr *ngFor="let trade of trades"><td>#{{ trade.id }}</td><td class="symbol-cell">{{ trade.symbol }}</td><td><span class="side-badge" [class.buy-badge]="trade.side === 'BUY'" [class.sell-badge]="trade.side === 'SELL'">{{ trade.side }}</span></td><td>{{ trade.quantity | number:'1.2-4' }}</td><td>{{ trade.price | number:'1.2-8' }}</td><td>{{ trade.executedAt | date:'medium' }}</td></tr></tbody></table></div></article>
+  </section>
+</main>
